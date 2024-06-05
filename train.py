@@ -52,6 +52,18 @@ class ImageClassifier(LightningModule):
         self.log('val_recall', self.recall(logits, labels), on_epoch=True, prog_bar=False)
         self.log('val_f1', self.f1(logits, labels), on_epoch=True, prog_bar=True)
 
+    def test_step(self, batch):
+        imgs, labels = batch
+        logits = self(imgs)
+
+        loss = self.loss(logits, labels)
+
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_acc', self.accuracy(logits, labels), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val_precision', self.precision(logits, labels), on_epoch=True, prog_bar=False)
+        self.log('val_recall', self.recall(logits, labels), on_epoch=True, prog_bar=False)
+        self.log('val_f1', self.f1(logits, labels), on_epoch=True, prog_bar=True)
+
     def configure_optimizers(self):
         optimizer = AdaBelief(self.parameters(), lr=lr, eps=1e-16, betas=(0.9, 0.999), weight_decouple=True,
                               rectify=False, weight_decay=2e-4)
@@ -70,12 +82,12 @@ def init_model(model_name, num_classes):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--model_name', type=str, default='efficientnet_b0')
-    parser.add_argument('--batch_size', type=int, default=64)
-    parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--model_name', type=str, default='efficientnet_b3')
+    parser.add_argument('--batch_size', type=int)
+    parser.add_argument('--lr', type=float, default=5e-4)
+    parser.add_argument('--epochs', type=int, default=25)
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=8)
     args = parser.parse_args()
 
     for (k, v) in vars(args).items():
