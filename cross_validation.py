@@ -165,7 +165,13 @@ if __name__ == '__main__':
 
         data_config = timm.data.resolve_model_data_config(model)
 
-        train_loader, val_loader, test_loader = setup_dataloaders(data_config=data_config, fold_dir=fold_dir)
+        train_loader, val_loader, test_loader = setup_dataloaders(data_config=data_config,
+                                                                  fold_dir=fold_dir,
+                                                                  data_dir=data_dir,
+                                                                  seed=seed,
+                                                                  batch_size=batch_size,
+                                                                  num_workers=num_workers,
+                                                                  label_map=label_map)
 
         model = ImageClassifier(model=model)
 
