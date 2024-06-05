@@ -12,7 +12,7 @@ from torch import nn
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
-from utils import setup_reproducability, setup_dataloaders
+from utils import setup_reproducability, setup_dataloaders, get_batch_size
 
 
 class ImageClassifier(LightningModule):
@@ -64,15 +64,6 @@ def init_model(model_name, num_classes):
         return timm.create_model('efficientnet_b0.ra_in1k', pretrained=True, num_classes=num_classes)
     elif model_name == 'efficientnet_b3':
         return timm.create_model('efficientnet_b3.ra2_in1k', pretrained=True, num_classes=num_classes)
-    else:
-        raise ValueError("Invalid model name")
-
-
-def get_batch_size(model_name):
-    if model_name == 'efficientnet_b0':
-        return 64
-    elif model_name == 'efficientnet_b3':
-        return 16
     else:
         raise ValueError("Invalid model name")
 

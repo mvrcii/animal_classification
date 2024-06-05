@@ -12,7 +12,7 @@ from torch import nn
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
-from utils import setup_dataloaders, setup_reproducability
+from utils import setup_dataloaders, setup_reproducability, get_batch_size
 
 
 class ImageClassifier(LightningModule):
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     model_name = args.model_name
     data_dir = args.data_dir
     num_classes = 6
-    batch_size = args.batch_size
+    batch_size = args.batch_size if args.batch_size else get_batch_size(model_name)
     lr = args.lr
     epochs = args.epochs
     seed = args.seed

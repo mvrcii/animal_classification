@@ -75,3 +75,12 @@ def setup_reproducability(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+
+
+def get_batch_size(model_name):
+    if model_name == 'efficientnet_b0':
+        return 64
+    elif model_name == 'efficientnet_b3':
+        return 32
+    else:
+        raise ValueError("Invalid model name")
