@@ -177,7 +177,8 @@ def main():
         mode='max',
         dirpath="weights",
         filename="best_" + model_name + '_' + str(id) + '.pth.tar',
-        save_top_k=1
+        save_top_k=1,
+        verbose=True
     )
 
     trainer = Trainer(
