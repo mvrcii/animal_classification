@@ -1,11 +1,9 @@
 import argparse
 import os
-import random
 
 import numpy as np
 import timm
 import torch
-from PIL import Image
 from adabelief_pytorch import AdaBelief
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -13,53 +11,12 @@ from lightning.pytorch.loggers import WandbLogger
 from sklearn.model_selection import train_test_split
 from timm.data import create_transform
 from torch import nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
-
-
-def setup_reproducability(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-
-
-class AnimalDataset(Dataset):
-    def __init__(self, features, label_map, labels=None, transform=None):
-        if features is None:
-            raise ValueError("Features cannot be None")
-        self.features = features
-        self.labels = labels
-        self.transform = transform
-        self.label_map = label_map
-
-    def __len__(self):
-        return len(self.features)
-
-    def __getitem__(self, idx):
-        img = self.features[idx]
-
-        # Repeat single-channel image array along a new dimension to create RGB image
-        img_rgb = np.repeat(img[..., np.newaxis], 3, -1)
-        img_rgb = np.squeeze(img_rgb, axis=-2)
-
-        # Convert numpy array to PIL Image
-        img = Image.fromarray(img_rgb.astype('uint8'))
-
-        if self.transform:
-            img = self.transform(img)
-
-        if self.labels is not None:
-            label = self.labels[idx]
-            # Map label to numerical value
-            label = self.label_map[label]
-            return img, label
-        else:
-            return img
+from dataset.animal_dataset import AnimalDataset
+from utils import setup_reproducability
 
 
 class ImageClassifier(LightningModule):
@@ -126,17 +83,27 @@ def load_files(root_dir):
     return train_features, train_labels, test_features
 
 
-def setup_dataloaders(data_config):
+def setup_dataloaders(data_config, fold_dir=None):
     train_transform = create_transform(**data_config, is_training=True)
     val_transform = create_transform(**data_config)
 
     # Load the data
     train_features, train_labels, test_features = load_files(root_dir=data_dir)
 
-    # Split train data into train and validation sets
-    train_features, val_features, train_labels, val_labels = train_test_split(
-        train_features, train_labels, test_size=0.2, random_state=seed
-    )
+    if fold_dir:
+        # Load train and validation indices from fold files
+        train_index = np.load(os.path.join(fold_dir, 'train_indices.npy'))
+        val_index = np.load(os.path.join(fold_dir, 'val_indices.npy'))
+
+        train_features = train_features[train_index]
+        val_features = train_features[val_index]
+        train_labels = train_labels[train_index]
+        val_labels = train_labels[val_index]
+    else:
+        # Split train data into train and validation sets
+        train_features, val_features, train_labels, val_labels = train_test_split(
+            train_features, train_labels, test_size=0.2, random_state=seed
+        )
 
     train_dataset = AnimalDataset(features=train_features, labels=train_labels, label_map=label_map,
                                   transform=train_transform)
@@ -163,56 +130,25 @@ def init_model(model_name, num_classes):
         raise ValueError("Invalid model name")
 
 
-def main():
-    dirName = "weights"
-    try:
-        os.makedirs(dirName)
-        print("Checkpoint directory", dirName, "created")
-    except FileExistsError:
-        print("Checkpoint directory", dirName, "already exists")
-
-    wandb.init(project="animal_classifcation", entity="mvrcii_")
-    wandb.run.name = os.path.basename(__file__)[:-3] + "_" + wandb.run.name.split("-")[2]
-    wandb_logger = WandbLogger(experiment=wandb.run)
-
-    model = init_model(model_name, num_classes)
-    data_config = timm.data.resolve_model_data_config(model)
-
-    train_loader, val_loader, test_loader = setup_dataloaders(data_config=data_config)
-
-    model = ImageClassifier(model=model)
-
-    ckpt_callback = ModelCheckpoint(
-        monitor="val_acc",
-        mode='max',
-        dirpath="weights",
-        filename="best_" + model_name + '_' + wandb.run.name.split("-")[2] + '.pth.tar',
-        save_top_k=1,
-        verbose=True
-    )
-
-    trainer = Trainer(
-        logger=wandb_logger,
-        devices=1,
-        accelerator=device,
-        callbacks=[ckpt_callback],
-        max_epochs=epochs,
-    )
-
-    trainer.fit(model, train_loader, val_loader)
-
-    trainer.test()
+def get_batch_size(model_name):
+    if model_name == 'efficientnet_b0':
+        return 64
+    elif model_name == 'efficientnet_b3':
+        return 16
+    else:
+        raise ValueError("Invalid model name")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default='data')
+    parser.add_argument('--data_dir', type=str, required=True)
+    parser.add_argument('--CV_fold_path', type=str, required=True)
     parser.add_argument('--model_name', type=str, default='efficientnet_b0')
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=25)
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--num_workers', type=int, default=8)
     args = parser.parse_args()
 
     for (k, v) in vars(args).items():
@@ -221,11 +157,12 @@ if __name__ == '__main__':
     model_name = args.model_name
     data_dir = args.data_dir
     num_classes = 6
-    batch_size = args.batch_size
+    batch_size = args.batch_size if args.batch_size else get_batch_size(model_name)
     lr = args.lr
     epochs = args.epochs
     seed = args.seed
     num_workers = args.num_workers
+    CV_fold_path = args.CV_fold_path
 
     label_map = {
         'bird': 0,
@@ -237,7 +174,76 @@ if __name__ == '__main__':
     }
 
     setup_reproducability(seed)
+
     device = "mps" if torch.backends.mps.is_available() else ("gpu" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
-    main()
+    dirName = "weights"
+    try:
+        os.makedirs(dirName)
+        print("Checkpoint directory", dirName, "created")
+    except FileExistsError:
+        print("Checkpoint directory", dirName, "already exists")
+
+    group_id = wandb.util.generate_id()
+
+    CV_fold_folders = [x for x in os.listdir(CV_fold_path) if x.startswith("fold")]
+    CV_fold_folders = sorted(CV_fold_folders)
+    number_of_experiments = len(CV_fold_folders)
+
+    for i in range(number_of_experiments):
+        id = i + 1
+        print("\n--------------> Starting Fold " + str(id))
+
+        wandb.init(project="animal_classifcation",
+                   group=model_name + "_CV_C" + "_" + group_id,
+                   save_code=True,
+                   reinit=True)
+        wandb.run.name = "fold_" + str(id)
+        wandb.run.save()
+
+        config = wandb.config
+        config.exp = os.path.basename(__file__)[:-3]
+        config.model = model_name
+        config.dataset = "cv_fold_Dataset"
+        config.lr = lr
+        config.bs = batch_size
+        config.num_workers = num_workers
+        config.seed = seed
+
+        wandb_logger = WandbLogger(experiment=wandb.run)
+
+        fold_dir = os.path.join(CV_fold_path, CV_fold_folders[i])
+
+        ckpt_callback = ModelCheckpoint(
+            monitor="val_acc",
+            mode='max',
+            dirpath="weights",
+            filename="best_" + model_name + '_' + str(id) + '.pth.tar',
+            save_top_k=1,
+            verbose=True
+        )
+
+        trainer = Trainer(
+            logger=wandb_logger,
+            devices=1,
+            accelerator=device,
+            callbacks=[ckpt_callback],
+            max_epochs=epochs,
+        )
+
+        model = init_model(model_name, num_classes)
+
+        data_config = timm.data.resolve_model_data_config(model)
+
+        train_loader, val_loader, test_loader = setup_dataloaders(data_config=data_config, fold_dir=fold_dir)
+
+        model = ImageClassifier(model=model)
+
+        # >==== TRAINING ====<
+        trainer.fit(model, train_loader, val_loader)
+
+        # >==== TESTING ====<
+        trainer.test(dataloaders=test_loader)
+
+        wandb.finish()
