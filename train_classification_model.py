@@ -186,7 +186,7 @@ def main():
         monitor="val_acc",
         mode='max',
         dirpath="weights",
-        filename="best_" + model_name + '_' + str(id) + '.pth.tar',
+        filename="best_" + model_name + '_' + wandb.run.name.split("-")[2] + '.pth.tar',
         save_top_k=1,
         verbose=True
     )
