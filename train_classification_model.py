@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 
 import numpy as np
 import timm
@@ -16,6 +17,15 @@ from torch.utils.data import Dataset, DataLoader
 from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
+
+
+def setup_reproducability(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 class AnimalDataset(Dataset):
@@ -226,7 +236,7 @@ if __name__ == '__main__':
         'horse': 5
     }
 
-    np.random.seed(seed)
+    setup_reproducability(seed)
     device = "mps" if torch.backends.mps.is_available() else ("gpu" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
 
