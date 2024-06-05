@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from timm.data import create_transform
 from torch.utils.data import DataLoader
 
-from cross_validation import AnimalDataset
+from dataset.animal_dataset import AnimalDataset
 
 
 def load_files(root_dir):
