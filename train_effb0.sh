@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p ls6
-#SBATCH -J train_ac
+#SBATCH -J train
 #SBATCH --gres=gpu:rtx2080ti:1
 #SBATCH -o logs/slurm-%j.out
 
