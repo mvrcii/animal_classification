@@ -28,19 +28,20 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=8)
     args = parser.parse_args()
 
-    for (k, v) in vars(args).items():
-        print(k, ":", v)
-
     model_name = args.model_name
     data_dir = args.data_dir
     num_classes = 6
     batch_size = args.batch_size if args.batch_size else get_batch_size(model_name)
+    args.batch_size = batch_size
     lr = args.lr
     epochs = args.epochs
     seed = args.seed
     num_workers = args.num_workers
     CV_fold_path = args.CV_fold_path
     output_dir = args.output_dir
+
+    for (k, v) in vars(args).items():
+        print(k, ":", v)
 
     label_map = {
         'bird': 0,
