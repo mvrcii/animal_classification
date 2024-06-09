@@ -28,30 +28,31 @@ def parse_args():
 
 
 def get_config():
+    args = parse_args()
     try:
-        # Try using WandB config if available
-        import wandb
-        config = wandb.config
-    except (ImportError, AttributeError):
-        # Fallback to argparse if WandB is not available or not initialized
-        config = parse_args()
-    return config
+        if wandb.run:
+            for key, value in vars(args).items():
+                if key not in wandb.config:
+                    setattr(wandb.config, key, value)
+        return wandb.config
+    except AttributeError:
+        return args
 
 
-def init_wandb():
+def init_wandb(args):
     if 'WANDB_SWEEP_ID' in os.environ:
-        # If there's a sweep ID, it means we are running as part of a sweep
-        wandb.init(project="animal_classification", config=get_config())
+        # If there's a sweep ID, initialize WandB with argparse values as defaults
+        wandb.init(project="animal_classifcation", config=vars(args))
     else:
         # Standard initialization with fixed configuration
-        wandb.init(project="animal_classification", entity="mvrcii_", config=get_config())
+        wandb.init(project="animal_classifcation", entity="mvrcii_", config=vars(args))
 
-    # Update run name based on WandB initialization
-    if 'WANDB_SWEEP_ID' in os.environ:
-        sweep_id = wandb.sweep_id
+    # Set run name after initialization
+    if wandb.run.sweep_id:
+        sweep_id = wandb.run.sweep_id
         wandb.run.name = os.path.basename(__file__)[:-3] + "_sweep_" + sweep_id
     else:
-        wandb.run.name = os.path.basename(__file__)[:-3] + "_single_" + wandb.run.name.split("-")[2]
+        wandb.run.name = os.path.basename(__file__)[:-3] + "_single_" + wandb.run.id
     return wandb
 
 
@@ -62,7 +63,7 @@ def get_device():
 def get_checkpoint_dir(wandb):
     base_dir = "weights"
     if 'WANDB_SWEEP_ID' in os.environ:
-        sweep_id = wandb.sweep_id
+        sweep_id = wandb.run.sweep_id
         sweep_dir = os.path.join(base_dir, sweep_id)
         os.makedirs(sweep_dir, exist_ok=True)
         return sweep_dir
@@ -93,7 +94,7 @@ def get_callbacks(model_name, id, wandb):
         monitor="val_f1",
         mode='max',
         dirpath=ckpt_dir,
-        filename=f"best_{model_name}_{id}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
+        filename=f"best_{model_name}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
         save_top_k=1,
         verbose=True
     )
@@ -111,8 +112,10 @@ def get_callbacks(model_name, id, wandb):
 
 
 def main():
-    wandb = init_wandb()
-    config = get_config()
+    args = parse_args()
+    wandb = init_wandb(args)
+    config = wandb.config
+
     wandb_logger = WandbLogger(experiment=wandb.run)
 
     model_name = config.model_name
