@@ -3,12 +3,13 @@ import os
 
 import timm
 import torch
-from model.pytorch.callbacks import ModelCheckpoint
-from model.pytorch.loggers import WandbLogger
+from lightning import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 from timm.data import create_transform
 
 import wandb
-from model import Trainer
+from classifier_module import ImageClassifier
 from utils import setup_dataloaders, setup_reproducability, get_batch_size, init_model
 
 if __name__ == '__main__':
@@ -68,7 +69,7 @@ if __name__ == '__main__':
                                                               num_workers=num_workers,
                                                               label_map=label_map)
 
-    model = ImageClassifier(model=model)
+    model = ImageClassifier(model_name=model_name, num_classes=num_classes)
 
     ckpt_callback = ModelCheckpoint(
         monitor="val_acc",
