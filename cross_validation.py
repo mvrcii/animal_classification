@@ -148,7 +148,7 @@ if __name__ == '__main__':
             monitor="val_acc",
             mode='max',
             dirpath="weights",
-            filename="best_" + model_name + '_' + str(id) + '.pth.tar',
+            filename="best_" + model_name + '_' + str(id),
             save_top_k=1,
             verbose=True
         )
