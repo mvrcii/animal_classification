@@ -10,6 +10,7 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import WandbLogger
 from timm.data import create_transform
+from wandb.util import generate_id
 
 import wandb
 from classifier_module import ImageClassifier
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     except FileExistsError:
         print("Checkpoint directory", dirName, "already exists")
 
-    group_id = wandb.util.generate_id()
+    group_id = generate_id()
 
     CV_fold_folders = [x for x in os.listdir(CV_fold_path) if x.startswith("fold")]
     CV_fold_folders = sorted(CV_fold_folders)
@@ -99,7 +100,7 @@ if __name__ == '__main__':
         ckpt_callback = ModelCheckpoint(
             monitor="val_f1",
             mode='max',
-            dirpath=os.path.join("weights", f"group_id={group_id}"),
+            dirpath=os.path.join("weights", group_id),
             filename=f"best_{model_name}_{id}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
             save_top_k=1,
             verbose=True
