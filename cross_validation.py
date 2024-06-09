@@ -7,7 +7,7 @@ import numpy as np
 import timm
 import torch
 from lightning import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import WandbLogger
 from timm.data import create_transform
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', type=str, default='efficientnet_b3')
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=25)
+    parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_workers', type=int, default=8)
     args = parser.parse_args()
@@ -97,10 +97,10 @@ if __name__ == '__main__':
         fold_dir = os.path.join(CV_fold_path, CV_fold_folders[i])
 
         ckpt_callback = ModelCheckpoint(
-            monitor="val_acc",
+            monitor="val_f1",
             mode='max',
             dirpath=os.path.join("weights", f"group_id={group_id}"),
-            filename="best_" + model_name + '_' + str(id),
+            filename=f"best_{model_name}_{id}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
             save_top_k=1,
             verbose=True
         )
@@ -113,11 +113,13 @@ if __name__ == '__main__':
             mode='min'
         )
 
+        lr_callback = LearningRateMonitor(logging_interval='epoch')
+
         trainer = Trainer(
             logger=wandb_logger,
             devices=1,
             accelerator=device,
-            callbacks=[ckpt_callback, early_stop_callback],
+            callbacks=[ckpt_callback, early_stop_callback, lr_callback],
             max_epochs=epochs,
         )
 
@@ -137,6 +139,7 @@ if __name__ == '__main__':
         trainer.fit(model, train_loader, val_loader)
 
         # >==== TESTING ====<
+        print(">==== EVALUATING & PREDICTING ====<")
         val_results = trainer.test(dataloaders=val_loader, ckpt_path='best')
         val_results_dict[f"Fold {id}"] = val_results[0]
 
