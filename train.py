@@ -3,81 +3,13 @@ import os
 
 import timm
 import torch
-from adabelief_pytorch import AdaBelief
-from lightning import LightningModule, Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
+from model.pytorch.callbacks import ModelCheckpoint
+from model.pytorch.loggers import WandbLogger
 from timm.data import create_transform
-from torch import nn
-from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
-from utils import setup_dataloaders, setup_reproducability, get_batch_size
-
-
-class ImageClassifier(LightningModule):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-        self.loss = nn.CrossEntropyLoss()
-        self.accuracy = MulticlassAccuracy(num_classes=num_classes, average='macro')
-        self.precision = MulticlassPrecision(num_classes=num_classes, average="macro")
-        self.recall = MulticlassRecall(num_classes=num_classes, average="macro")
-        self.f1 = MulticlassF1Score(num_classes=num_classes, average="macro")
-
-    def forward(self, x):
-        return self.model(x)
-
-    def training_step(self, batch):
-        img, label = batch
-        y_pred = self(img)
-
-        loss = self.loss(y_pred, label)
-        acc = self.accuracy(y_pred, label)
-
-        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('train_acc', acc, on_step=False, on_epoch=True, prog_bar=True)
-
-        return loss
-
-    def validation_step(self, batch):
-        imgs, labels = batch
-        logits = self(imgs)
-
-        loss = self.loss(logits, labels)
-
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_acc', self.accuracy(logits, labels), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_precision', self.precision(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_recall', self.recall(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_f1', self.f1(logits, labels), on_epoch=True, prog_bar=True)
-
-    def test_step(self, batch):
-        imgs, labels = batch
-        logits = self(imgs)
-
-        loss = self.loss(logits, labels)
-
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_acc', self.accuracy(logits, labels), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_precision', self.precision(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_recall', self.recall(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_f1', self.f1(logits, labels), on_epoch=True, prog_bar=True)
-
-    def configure_optimizers(self):
-        optimizer = AdaBelief(self.parameters(), lr=lr, eps=1e-16, betas=(0.9, 0.999), weight_decouple=True,
-                              rectify=False, weight_decay=2e-4)
-        return optimizer
-
-
-def init_model(model_name, num_classes):
-    if model_name == 'efficientnet_b0':
-        return timm.create_model('efficientnet_b0.ra_in1k', pretrained=True, num_classes=num_classes)
-    elif model_name == 'efficientnet_b3':
-        return timm.create_model('efficientnet_b3.ra2_in1k', pretrained=True, num_classes=num_classes)
-    else:
-        raise ValueError("Invalid model name")
-
+from model import Trainer
+from utils import setup_dataloaders, setup_reproducability, get_batch_size, init_model
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -2,6 +2,7 @@ import os
 import random
 
 import numpy as np
+import timm
 import torch
 from sklearn.model_selection import train_test_split
 from timm.data import create_transform
@@ -84,5 +85,14 @@ def get_batch_size(model_name):
         return 64
     elif model_name == 'efficientnet_b3':
         return 32
+    else:
+        raise ValueError("Invalid model name")
+
+
+def init_model(model_name, num_classes):
+    if model_name == 'efficientnet_b0':
+        return timm.create_model('efficientnet_b0.ra_in1k', pretrained=True, num_classes=num_classes)
+    elif model_name == 'efficientnet_b3':
+        return timm.create_model('efficientnet_b3.ra2_in1k', pretrained=True, num_classes=num_classes)
     else:
         raise ValueError("Invalid model name")

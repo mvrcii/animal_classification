@@ -1,78 +1,26 @@
 import argparse
+import json
 import os
+from datetime import datetime
 
+import numpy as np
 import timm
 import torch
-from adabelief_pytorch import AdaBelief
-from lightning import LightningModule, Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning import Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from lightning.pytorch.loggers import WandbLogger
 from timm.data import create_transform
-from torch import nn
-from torchmetrics.classification import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 
 import wandb
+from classifier_module import ImageClassifier
 from utils import setup_reproducability, setup_dataloaders, get_batch_size
-
-
-class ImageClassifier(LightningModule):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-        self.loss = nn.CrossEntropyLoss()
-        self.accuracy = MulticlassAccuracy(num_classes=num_classes, average='macro')
-        self.precision = MulticlassPrecision(num_classes=num_classes, average="macro")
-        self.recall = MulticlassRecall(num_classes=num_classes, average="macro")
-        self.f1 = MulticlassF1Score(num_classes=num_classes, average="macro")
-
-    def forward(self, x):
-        return self.model(x)
-
-    def training_step(self, batch):
-        img, label = batch
-        y_pred = self(img)
-
-        loss = self.loss(y_pred, label)
-        acc = self.accuracy(y_pred, label)
-
-        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('train_acc', acc, on_step=False, on_epoch=True, prog_bar=True)
-
-        return loss
-
-    def validation_step(self, batch):
-        imgs, labels = batch
-        logits = self(imgs)
-
-        loss = self.loss(logits, labels)
-
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_acc', self.accuracy(logits, labels), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val_precision', self.precision(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_recall', self.recall(logits, labels), on_epoch=True, prog_bar=False)
-        self.log('val_f1', self.f1(logits, labels), on_epoch=True, prog_bar=True)
-
-    def configure_optimizers(self):
-        optimizer = AdaBelief(self.parameters(), lr=lr, eps=1e-16, betas=(0.9, 0.999), weight_decouple=True,
-                              rectify=False, weight_decay=2e-4)
-        # return optim.AdamW(self.parameters(), lr=lr, weight_decay=2e-4)
-        return optimizer
-
-
-def init_model(model_name, num_classes):
-    if model_name == 'efficientnet_b0':
-        return timm.create_model('efficientnet_b0.ra_in1k', pretrained=True, num_classes=num_classes)
-    elif model_name == 'efficientnet_b3':
-        return timm.create_model('efficientnet_b3.ra2_in1k', pretrained=True, num_classes=num_classes)
-    else:
-        raise ValueError("Invalid model name")
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, required=True)
     parser.add_argument('--CV_fold_path', type=str, required=True)
-    parser.add_argument('--model_name', type=str, default='efficientnet_b0')
+    parser.add_argument('--output_dir', type=str, default='CV_results')
+    parser.add_argument('--model_name', type=str, default='efficientnet_b3')
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--epochs', type=int, default=25)
@@ -92,6 +40,7 @@ if __name__ == '__main__':
     seed = args.seed
     num_workers = args.num_workers
     CV_fold_path = args.CV_fold_path
+    output_dir = args.output_dir
 
     label_map = {
         'bird': 0,
@@ -119,6 +68,9 @@ if __name__ == '__main__':
     CV_fold_folders = [x for x in os.listdir(CV_fold_path) if x.startswith("fold")]
     CV_fold_folders = sorted(CV_fold_folders)
     number_of_experiments = len(CV_fold_folders)
+
+    all_predictions = []
+    val_results_dict = {}
 
     for i in range(number_of_experiments):
         id = i + 1
@@ -153,15 +105,23 @@ if __name__ == '__main__':
             verbose=True
         )
 
+        early_stop_callback = EarlyStopping(
+            monitor='val_loss',
+            patience=5,
+            strict=False,
+            verbose=True,
+            mode='min'
+        )
+
         trainer = Trainer(
             logger=wandb_logger,
             devices=1,
             accelerator=device,
-            callbacks=[ckpt_callback],
+            callbacks=[ckpt_callback, early_stop_callback],
             max_epochs=epochs,
         )
 
-        model = init_model(model_name, num_classes)
+        model = ImageClassifier(model_name=model_name, num_classes=num_classes, lr=lr)
 
         data_config = timm.data.resolve_model_data_config(model)
 
@@ -173,12 +133,29 @@ if __name__ == '__main__':
                                                                   num_workers=num_workers,
                                                                   label_map=label_map)
 
-        model = ImageClassifier(model=model)
-
         # >==== TRAINING ====<
         trainer.fit(model, train_loader, val_loader)
 
         # >==== TESTING ====<
-        trainer.test(dataloaders=test_loader)
+        val_results = trainer.test(dataloaders=val_loader, ckpt_path='best')
+        val_results_dict[f"Fold {id}"] = val_results[0]
+
+        # Predict on test set
+        predictions = trainer.predict(dataloaders=test_loader, ckpt_path='best')
+        predictions = torch.cat(predictions)
+        all_predictions.append(predictions.numpy())
 
         wandb.finish()
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = os.path.join(output_dir, f'{timestamp}_group_id={group_id}')
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save validation results as JSON
+    with open(os.path.join(output_dir, "validation_results.json"), 'w') as json_file:
+        json.dump(val_results_dict, json_file, indent=4)
+
+    all_predictions = np.vstack(all_predictions)
+    np.save(os.path.join(output_dir, f"test_predictions.npy"), all_predictions)
+
+    print("All folds evaluated successfully.")
