@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-from datetime import datetime
 
 import numpy as np
 import timm
@@ -107,11 +106,11 @@ if __name__ == '__main__':
         )
 
         early_stop_callback = EarlyStopping(
-            monitor='val_loss',
-            patience=5,
+            monitor='val_f1',
+            patience=10,
             strict=False,
             verbose=True,
-            mode='min'
+            mode='max'
         )
 
         lr_callback = LearningRateMonitor(logging_interval='epoch')
@@ -151,8 +150,7 @@ if __name__ == '__main__':
 
         wandb.finish()
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = os.path.join(output_dir, f'{timestamp}_group_id={group_id}')
+    output_dir = os.path.join(output_dir, group_id)
     os.makedirs(output_dir, exist_ok=True)
 
     # Save validation results as JSON

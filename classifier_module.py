@@ -12,11 +12,13 @@ class ImageClassifier(LightningModule):
         super().__init__()
         self.lr = lr
         self.model = init_model(model_name, num_classes)
+
         self.loss = nn.CrossEntropyLoss()
         self.accuracy = MulticlassAccuracy(num_classes=num_classes, average='macro')
         self.precision = MulticlassPrecision(num_classes=num_classes, average="macro")
         self.recall = MulticlassRecall(num_classes=num_classes, average="macro")
         self.f1 = MulticlassF1Score(num_classes=num_classes, average="macro")
+
         self.save_hyperparameters()
 
     def forward(self, x):
