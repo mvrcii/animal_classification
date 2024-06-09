@@ -42,22 +42,24 @@ def setup_dataloaders(data_config, data_dir, seed, batch_size, num_workers, labe
         train_index = np.load(os.path.join(fold_dir, 'train_indices.npy'))
         val_index = np.load(os.path.join(fold_dir, 'val_indices.npy'))
 
-        train_features = train_features[train_index]
-        val_features = train_features[val_index]
-        train_labels = train_labels[train_index]
-        val_labels = train_labels[val_index]
+        # Use the indices to create the training and validation sets
+        train_features_fold = train_features[train_index]
+        val_features_fold = train_features[val_index]
+        train_labels_fold = train_labels[train_index]
+        val_labels_fold = train_labels[val_index]
     else:
         # Split train data into train and validation sets
-        train_features, val_features, train_labels, val_labels = train_test_split(
+        train_features_fold, val_features_fold, train_labels_fold, val_labels_fold = train_test_split(
             train_features, train_labels, test_size=0.2, random_state=seed
         )
 
-    train_dataset = AnimalDataset(features=train_features, labels=train_labels, label_map=label_map,
+    train_dataset = AnimalDataset(features=train_features_fold, labels=train_labels_fold, label_map=label_map,
                                   transform=train_transform)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=True,
                               persistent_workers=True, pin_memory=True)
 
-    val_dataset = AnimalDataset(features=val_features, labels=val_labels, label_map=label_map, transform=val_transform)
+    val_dataset = AnimalDataset(features=val_features_fold, labels=val_labels_fold, label_map=label_map,
+                                transform=val_transform)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False,
                             persistent_workers=True, pin_memory=True)
 
