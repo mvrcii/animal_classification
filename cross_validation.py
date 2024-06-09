@@ -99,7 +99,7 @@ if __name__ == '__main__':
         ckpt_callback = ModelCheckpoint(
             monitor="val_acc",
             mode='max',
-            dirpath="weights",
+            dirpath=os.path.join("weights", f"group_id={group_id}"),
             filename="best_" + model_name + '_' + str(id),
             save_top_k=1,
             verbose=True
