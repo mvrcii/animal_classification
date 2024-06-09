@@ -34,7 +34,7 @@ def main(args):
     all_predictions = []
     val_results_dict = {}
 
-    weight_dir = args.checkpoint_dir
+    weight_dir = args.ckpt_dir
     checkpoint_files = [f for f in os.listdir(weight_dir) if f.startswith(f"best_{model_name}") and f.endswith(".ckpt")]
 
     for checkpoint_file in checkpoint_files:

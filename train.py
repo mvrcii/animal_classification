@@ -4,7 +4,7 @@ import os
 import timm
 import torch
 from lightning import Trainer
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import WandbLogger
 from timm.data import create_transform
 
@@ -51,6 +51,22 @@ def init_wandb():
     return wandb
 
 
+def get_device():
+    return "mps" if torch.backends.mps.is_available() else ("gpu" if torch.cuda.is_available() else "cpu")
+
+
+def get_checkpoint_dir(wandb):
+    base_dir = "weights"
+    if 'WANDB_SWEEP_ID' in os.environ:
+        sweep_id = wandb.sweep_id
+        sweep_dir = os.path.join(base_dir, sweep_id)
+        os.makedirs(sweep_dir, exist_ok=True)
+        return sweep_dir
+    else:
+        os.makedirs(base_dir, exist_ok=True)
+        return base_dir
+
+
 def get_fold_dir(config):
     CV_fold_path = config.CV_fold_path
     fold_id = config.fold_id
@@ -66,7 +82,31 @@ def get_fold_dir(config):
     return fold_dir
 
 
-if __name__ == '__main__':
+def get_callbacks(model_name, id, wandb):
+    ckpt_dir = get_checkpoint_dir(wandb)
+
+    ckpt_callback = ModelCheckpoint(
+        monitor="val_f1",
+        mode='max',
+        dirpath=ckpt_dir,
+        filename=f"best_{model_name}_{id}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
+        save_top_k=1,
+        verbose=True
+    )
+
+    early_stop_callback = EarlyStopping(
+        monitor='val_f1',
+        patience=10,
+        strict=False,
+        verbose=True,
+        mode='max'
+    )
+
+    lr_callback = LearningRateMonitor(logging_interval='epoch')
+    return [ckpt_callback, early_stop_callback, lr_callback]
+
+
+def main():
     config = get_config()
     wandb = init_wandb()
     wandb_logger = WandbLogger(experiment=wandb.run)
@@ -93,33 +133,26 @@ if __name__ == '__main__':
     for (k, v) in vars(config).items():
         print(k, ":", v)
 
-    fold_dir = get_fold_dir(config)
     setup_reproducability(seed)
 
-    device = "mps" if torch.backends.mps.is_available() else ("gpu" if torch.cuda.is_available() else "cpu")
-    print("Device:", device)
+    fold_dir = get_fold_dir(config)
+    device = get_device()
 
-    dirName = "weights"
-    os.makedirs(dirName, exist_ok=True)
-
-    ckpt_callback = ModelCheckpoint(
-        monitor="val_f1",
-        mode='max',
-        dirpath=os.path.join("weights"),
-        filename=f"best_{model_name}_{id}_" + "epoch={epoch:02d}_valF1={val_f1:.4f}",
-        save_top_k=1,
-        verbose=True
-    )
+    callbacks = get_callbacks(model_name, id, wandb)
 
     trainer = Trainer(
         logger=wandb_logger,
         devices=1,
         accelerator=device,
-        callbacks=[ckpt_callback],
+        callbacks=callbacks,
         max_epochs=epochs,
     )
 
-    model = ImageClassifier(model_name=model_name, num_classes=num_classes)
+    model = ImageClassifier(
+        model_name=model_name,
+        lr=lr,
+        num_classes=num_classes
+    )
 
     data_config = timm.data.resolve_model_data_config(model)
 
@@ -136,3 +169,7 @@ if __name__ == '__main__':
     trainer.test(dataloaders=test_loader, ckpt_path='best')
 
     wandb.finish()
+
+
+if __name__ == '__main__':
+    main()
