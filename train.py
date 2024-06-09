@@ -47,7 +47,11 @@ def init_wandb():
         wandb.init(project="animal_classification", entity="mvrcii_", config=get_config())
 
     # Update run name based on WandB initialization
-    wandb.run.name = os.path.basename(__file__)[:-3] + "_" + wandb.run.name.split("-")[2]
+    if 'WANDB_SWEEP_ID' in os.environ:
+        sweep_id = wandb.sweep_id
+        wandb.run.name = os.path.basename(__file__)[:-3] + "_sweep_" + sweep_id
+    else:
+        wandb.run.name = os.path.basename(__file__)[:-3] + "_single_" + wandb.run.name.split("-")[2]
     return wandb
 
 
@@ -107,8 +111,8 @@ def get_callbacks(model_name, id, wandb):
 
 
 def main():
-    config = get_config()
     wandb = init_wandb()
+    config = get_config()
     wandb_logger = WandbLogger(experiment=wandb.run)
 
     model_name = config.model_name
