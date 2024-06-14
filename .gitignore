@@ -5,3 +5,6 @@ wandb
 lightning_logs
 logs
 **/__pycache__
+.ipynb_checkpoints
+CV_results
+weights
