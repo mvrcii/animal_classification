@@ -3,3 +3,5 @@
 
 wandb
 lightning_logs
+logs
+**/__pycache__
