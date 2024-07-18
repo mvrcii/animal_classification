@@ -80,7 +80,7 @@ def main(args):
         json.dump(val_results_dict, json_file, indent=4)
 
     all_predictions = np.vstack(all_predictions)
-    np.save(os.path.join(output_dir, "test_predictions.npy"), all_predictions)
+    np.save(os.path.join(output_dir, "test_predictions_10fold.npy"), all_predictions)
 
     print("All folds evaluated successfully.")
 
